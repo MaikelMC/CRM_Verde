@@ -1,0 +1,44 @@
+import type { Moneda } from "./ops";
+
+// Dinero: siempre centavos enteros. Este módulo solo formatea/parsea; nunca hace aritmética con floats.
+
+const SIMBOLO: Record<Moneda, string> = { CUP: "$", USD: "US$" };
+const GRUPOS = new Intl.NumberFormat("es", { maximumFractionDigits: 0 });
+
+// 1250 -> "$12,50"
+export function formatMoney(cents: number, moneda: Moneda = "CUP"): string {
+  const abs = Math.abs(Math.trunc(cents));
+  const entero = Math.trunc(abs / 100);
+  const frac = abs % 100;
+  return `${cents < 0 ? "-" : ""}${SIMBOLO[moneda]}${GRUPOS.format(entero)},${String(frac).padStart(2, "0")}`;
+}
+
+// Separa "1.250" (miles) de "12.50" (decimales) según los dígitos tras el último separador.
+function unir(s: string, sep: string): string {
+  const partes = s.split(sep);
+  if (partes.length === 2) {
+    const frac = partes[1] ?? "";
+    if (frac.length <= 2) return `${partes[0]}.${frac}`;
+    return partes.join("");
+  }
+  return partes.join("");
+}
+
+// "12,50" | "12.50" | "1.250" -> centavos. null si no es un monto válido.
+export function parseMoney(input: string): number | null {
+  let s = input.trim().replace(/[$\s]/g, "");
+  const conComa = s.includes(",");
+  const conPunto = s.includes(".");
+  if (conComa && conPunto) {
+    const dec = Math.max(s.lastIndexOf(","), s.lastIndexOf("."));
+    const entero = s.slice(0, dec).replace(/[.,]/g, "");
+    const frac = s.slice(dec + 1).replace(/[.,]/g, "");
+    s = `${entero}.${frac}`;
+  } else if (conComa) s = unir(s, ",");
+  else if (conPunto) s = unir(s, ".");
+
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
+  const [entero = "", frac = ""] = s.split(".");
+  const cents = Number(entero) * 100 + Number(frac.padEnd(2, "0"));
+  return Number.isSafeInteger(cents) ? cents : null;
+}

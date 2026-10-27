@@ -24,6 +24,8 @@ function toWire(p: typeof products.$inferSelect) {
     moneda: p.moneda,
     costoCents: p.costoCents,
     activo: p.activo,
+    trackStock: p.trackStock,
+    minStock: p.minStock,
     stockQty: p.stockQty,
     updatedAt: p.updatedAt.getTime(),
     deletedAt: p.deletedAt ? p.deletedAt.getTime() : null,

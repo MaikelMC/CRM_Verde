@@ -1,20 +1,23 @@
 import Dexie, { type Table } from "dexie";
 import { newId } from "../lib/ids";
+import type { Moneda, OpType, PaymentMethod } from "../shared/ops";
+
+export type { Moneda, OpType, PaymentMethod };
 
 export type ProductRow = {
   id: string;
   nombre: string;
   categoria: string | null;
   precioCents: number;
-  moneda: "CUP" | "USD";
+  moneda: Moneda;
   costoCents: number | null;
   activo: boolean;
+  trackStock: boolean;
+  minStock: number;
   stockQty: number;
   updatedAt: number;
   deletedAt: number | null;
 };
-
-export type OpType = "sale.create" | "product.upsert" | "product.delete" | "stock.adjust" | "cash.open" | "cash.close";
 
 export type OutboxRow = {
   op_id: string;
@@ -28,10 +31,23 @@ export type OutboxRow = {
 
 export type SaleLocal = {
   id: string;
-  created_at: number;
+  occurred_at: number;
   totalCents: number;
-  moneda: "CUP" | "USD";
+  moneda: Moneda;
+  method: PaymentMethod;
+  cash_session_id: string | null;
+  user_id: string;
   items: { product_id: string; nombre: string; precio_cents: number; qty: number }[];
+};
+
+export type CashSessionRow = {
+  id: string;
+  user_id: string;
+  moneda: Moneda;
+  opened_at: number;
+  closed_at: number | null;
+  opening_cents: number;
+  closing_cents: number | null;
 };
 
 export type MetaRow = { key: string; value: string };
@@ -40,17 +56,35 @@ class LvDb extends Dexie {
   products!: Table<ProductRow, string>;
   outbox!: Table<OutboxRow, string>;
   sales_local!: Table<SaleLocal, string>;
+  cash_sessions!: Table<CashSessionRow, string>;
   meta!: Table<MetaRow, string>;
 
   constructor() {
     super("lv_gestion");
-    // v1: esquema inicial. Cambios futuros = this.version(2).stores(...).
     this.version(1).stores({
       products: "id, updatedAt",
       outbox: "op_id, created_at, status",
       sales_local: "id, created_at",
       meta: "key",
     });
+    // v2: inventario (trackStock/minStock), caja y ventas locales con método y sesión.
+    this.version(2)
+      .stores({
+        products: "id, updatedAt, moneda",
+        outbox: "op_id, created_at, status",
+        sales_local: "id, occurred_at, moneda, cash_session_id",
+        cash_sessions: "id, opened_at, closed_at, [user_id+moneda]",
+        meta: "key",
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table("products")
+          .toCollection()
+          .modify((p: ProductRow) => {
+            p.trackStock ??= false;
+            p.minStock ??= 0;
+          });
+      });
   }
 }
 

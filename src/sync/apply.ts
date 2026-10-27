@@ -1,9 +1,20 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { z } from "zod";
+
 import type { Db } from "../db/client";
 import { cashSessions, opLog, products, saleItems, sales, stockMovements, type Role } from "../db/schema";
 import { newId } from "../lib/ids";
+import {
+  cashClosePayloadSchema,
+  cashOpenPayloadSchema,
+  deletePayloadSchema,
+  opSchema,
+  productPayloadSchema,
+  salePayloadSchema,
+  stockPayloadSchema,
+  type OpType,
+} from "../shared/ops";
 
 type Stmt = BatchItem<"sqlite">;
 
@@ -15,61 +26,6 @@ export const syncBodySchema = z.object({
   ops: z.array(z.unknown()).min(1).max(50),
 });
 
-const opSchema = z.object({
-  op_id: z.string().min(1).max(40),
-  type: z.enum(["sale.create", "product.upsert", "product.delete", "stock.adjust", "cash.open", "cash.close"]),
-  payload: z.unknown(),
-});
-
-type OpType = z.infer<typeof opSchema>["type"];
-
-const salePayload = z.object({
-  id: z.string().min(1).max(40),
-  moneda: z.enum(["CUP", "USD"]).default("CUP"),
-  created_at: z.number().int().positive().optional(),
-  items: z
-    .array(
-      z.object({
-        product_id: z.string().min(1).max(40),
-        nombre: z.string().min(1).max(120),
-        precio_cents: z.number().int().min(0),
-        qty: z.number().int().min(1).max(10_000),
-      }),
-    )
-    .min(1)
-    .max(100),
-});
-
-const productPayload = z.object({
-  id: z.string().min(1).max(40),
-  nombre: z.string().min(1).max(120),
-  categoria: z.string().max(80).nullish(),
-  precio_cents: z.number().int().min(0),
-  moneda: z.enum(["CUP", "USD"]).default("CUP"),
-  costo_cents: z.number().int().min(0).nullish(),
-  activo: z.boolean().optional(),
-});
-
-const deletePayload = z.object({ id: z.string().min(1).max(40) });
-
-const stockPayload = z.object({
-  product_id: z.string().min(1).max(40),
-  delta: z.number().int().refine((v) => v !== 0, "delta no puede ser 0"),
-  tipo: z.enum(["compra", "ajuste", "merma"]),
-  nota: z.string().max(200).nullish(),
-});
-
-const cashOpenPayload = z.object({
-  id: z.string().min(1).max(40),
-  opening_cents: z.number().int().min(0),
-  moneda: z.enum(["CUP", "USD"]).default("CUP"),
-});
-
-const cashClosePayload = z.object({
-  id: z.string().min(1).max(40),
-  closing_cents: z.number().int().min(0),
-});
-
 // El cajero solo vende y mueve caja; dueño/gerente pueden todo.
 const CAJERO = new Set<OpType>(["sale.create", "cash.open", "cash.close"]);
 
@@ -77,7 +33,7 @@ const CAJERO = new Set<OpType>(["sale.create", "cash.open", "cash.close"]);
 function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date): Stmt[] | string {
   switch (type) {
     case "sale.create": {
-      const p = salePayload.safeParse(payload);
+      const p = salePayloadSchema.safeParse(payload);
       if (!p.success) return "invalid_payload";
       const totalCents = p.data.items.reduce((sum, i) => sum + i.precio_cents * i.qty, 0);
       const stmts: Stmt[] = [
@@ -88,7 +44,9 @@ function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date):
           deviceId: ctx.deviceId,
           totalCents,
           moneda: p.data.moneda,
-          createdAt: new Date(p.data.created_at ?? now.getTime()),
+          method: p.data.method,
+          cashSessionId: p.data.cash_session_id ?? null,
+          occurredAt: new Date(p.data.occurred_at ?? now.getTime()),
         }),
       ];
       for (const i of p.data.items) {
@@ -103,16 +61,18 @@ function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date):
             qty: i.qty,
           }),
           // Venta ya ocurrió: se permite stock negativo. Sin stock_movements.
+          // Solo toca productos con control de inventario: los demás no se re-escriben
+          // (ni cambian su updated_at, que provocaría re-descargarlos al cliente).
           db
             .update(products)
             .set({ stockQty: sql`${products.stockQty} - ${i.qty}`, updatedAt: now })
-            .where(and(eq(products.id, i.product_id), eq(products.tenantId, ctx.tenantId))),
+            .where(and(eq(products.id, i.product_id), eq(products.tenantId, ctx.tenantId), eq(products.trackStock, true))),
         );
       }
       return stmts;
     }
     case "product.upsert": {
-      const p = productPayload.safeParse(payload);
+      const p = productPayloadSchema.safeParse(payload);
       if (!p.success) return "invalid_payload";
       const set = {
         nombre: p.data.nombre,
@@ -121,6 +81,8 @@ function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date):
         moneda: p.data.moneda,
         costoCents: p.data.costo_cents ?? null,
         activo: p.data.activo ?? true,
+        ...(p.data.track_stock === undefined ? {} : { trackStock: p.data.track_stock }),
+        ...(p.data.min_stock === undefined ? {} : { minStock: p.data.min_stock }),
         deletedAt: null,
         updatedAt: now,
       };
@@ -133,7 +95,7 @@ function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date):
       ];
     }
     case "product.delete": {
-      const p = deletePayload.safeParse(payload);
+      const p = deletePayloadSchema.safeParse(payload);
       if (!p.success) return "invalid_payload";
       return [
         db
@@ -143,7 +105,7 @@ function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date):
       ];
     }
     case "stock.adjust": {
-      const p = stockPayload.safeParse(payload);
+      const p = stockPayloadSchema.safeParse(payload);
       if (!p.success) return "invalid_payload";
       return [
         db.insert(stockMovements).values({
@@ -163,7 +125,7 @@ function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date):
       ];
     }
     case "cash.open": {
-      const p = cashOpenPayload.safeParse(payload);
+      const p = cashOpenPayloadSchema.safeParse(payload);
       if (!p.success) return "invalid_payload";
       return [
         db.insert(cashSessions).values({
@@ -177,7 +139,7 @@ function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date):
       ];
     }
     case "cash.close": {
-      const p = cashClosePayload.safeParse(payload);
+      const p = cashClosePayloadSchema.safeParse(payload);
       if (!p.success) return "invalid_payload";
       return [
         db

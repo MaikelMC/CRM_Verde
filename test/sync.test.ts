@@ -26,7 +26,7 @@ describe("POST /api/sync (applyOps)", () => {
     const pid = id();
     await db
       .insert(products)
-      .values({ id: pid, tenantId, nombre: "Café", precioCents: 250, updatedAt: new Date(), stockQty: 10 });
+      .values({ id: pid, tenantId, nombre: "Café", precioCents: 250, updatedAt: new Date(), stockQty: 10, trackStock: true });
 
     const op = {
       op_id: id(),

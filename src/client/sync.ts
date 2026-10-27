@@ -1,21 +1,12 @@
 import { newId } from "../lib/ids";
-import { db, getDeviceId, type OpType, type ProductRow, type SaleLocal } from "./db";
+import type { CashClosePayload, CashOpenPayload, OpType, ProductPayload, SalePayload, StockPayload } from "../shared/ops";
+import { db, getDeviceId, type ProductRow } from "./db";
 
 type FetchLike = typeof fetch;
 type SyncResult = { op_id: string; status: "applied" | "duplicate" | "rejected"; error?: string };
 type SyncPage = { products: ProductRow[]; cursor: string; has_more: boolean };
 
-export type SaleInput = { id: string; moneda?: "CUP" | "USD"; created_at?: number; items: SaleLocal["items"] };
-export type ProductInput = {
-  id: string;
-  nombre: string;
-  categoria?: string | null;
-  precio_cents: number;
-  moneda?: "CUP" | "USD";
-  costo_cents?: number | null;
-  activo?: boolean;
-};
-export type StockInput = { product_id: string; delta: number; tipo: "compra" | "ajuste" | "merma"; nota?: string | null };
+export type { CashClosePayload, CashOpenPayload, ProductPayload, SalePayload, StockPayload };
 
 const listeners = new Set<() => void>();
 let needsLogin = false;
@@ -39,36 +30,53 @@ export function loginRequired(): boolean {
 const isBrowser = () => typeof window !== "undefined";
 const isOnline = () => typeof navigator === "undefined" || navigator.onLine !== false;
 
+// Usuario de la sesión cacheada (la escribe ./session.ts al entrar o al refrescar /api/me).
+async function currentUserId(): Promise<string> {
+  const row = await db.meta.get("session");
+  if (!row) return "";
+  try {
+    return (JSON.parse(row.value) as { userId?: string }).userId ?? "";
+  } catch {
+    return "";
+  }
+}
+
 // Efecto local de la op. Todo dentro de la transacción de enqueue.
 async function applyLocal(type: OpType, payload: unknown): Promise<void> {
   switch (type) {
     case "sale.create": {
-      const p = payload as SaleInput;
+      const p = payload as SalePayload;
       const totalCents = p.items.reduce((sum, i) => sum + i.precio_cents * i.qty, 0);
+      // Solo se descuenta lo que se controla (misma regla que el servidor).
       for (const i of p.items) {
         const prod = await db.products.get(i.product_id);
-        if (prod) await db.products.update(prod.id, { stockQty: prod.stockQty - i.qty });
+        if (prod?.trackStock) await db.products.update(prod.id, { stockQty: prod.stockQty - i.qty });
       }
       await db.sales_local.put({
         id: p.id,
-        created_at: p.created_at ?? Date.now(),
+        occurred_at: p.occurred_at ?? Date.now(),
         totalCents,
-        moneda: p.moneda ?? "CUP",
+        moneda: p.moneda,
+        method: p.method,
+        cash_session_id: p.cash_session_id ?? null,
+        user_id: await currentUserId(),
         items: p.items,
       });
       break;
     }
     case "product.upsert": {
-      const p = payload as ProductInput;
+      const p = payload as ProductPayload;
       const local = await db.products.get(p.id);
       await db.products.put({
         id: p.id,
         nombre: p.nombre,
         categoria: p.categoria ?? null,
         precioCents: p.precio_cents,
-        moneda: p.moneda ?? "CUP",
+        moneda: p.moneda,
         costoCents: p.costo_cents ?? null,
         activo: p.activo ?? true,
+        trackStock: p.track_stock ?? local?.trackStock ?? false,
+        minStock: p.min_stock ?? local?.minStock ?? 0,
         stockQty: local?.stockQty ?? 0,
         // Reloj del teléfono: solo para orden local; el servidor manda.
         updatedAt: Date.now(),
@@ -84,18 +92,36 @@ async function applyLocal(type: OpType, payload: unknown): Promise<void> {
       break;
     }
     case "stock.adjust": {
-      const p = payload as StockInput;
+      const p = payload as StockPayload;
       const prod = await db.products.get(p.product_id);
       if (prod) await db.products.update(prod.id, { stockQty: prod.stockQty + p.delta });
       break;
     }
-    // cash.open / cash.close: sin efecto local en Fase 2 (pantalla de caja en Fase 3).
+    case "cash.open": {
+      const p = payload as CashOpenPayload;
+      await db.cash_sessions.put({
+        id: p.id,
+        user_id: await currentUserId(),
+        moneda: p.moneda,
+        opened_at: Date.now(),
+        closed_at: null,
+        opening_cents: p.opening_cents,
+        closing_cents: null,
+      });
+      break;
+    }
+    case "cash.close": {
+      const p = payload as CashClosePayload;
+      const session = await db.cash_sessions.get(p.id);
+      if (session) await db.cash_sessions.update(p.id, { closed_at: Date.now(), closing_cents: p.closing_cents });
+      break;
+    }
   }
 }
 
 export async function enqueue(type: OpType, payload: unknown): Promise<string> {
   const op_id = newId();
-  await db.transaction("rw", db.products, db.outbox, db.sales_local, async () => {
+  await db.transaction("rw", db.products, db.outbox, db.sales_local, db.cash_sessions, db.meta, async () => {
     await applyLocal(type, payload);
     await db.outbox.add({ op_id, type, payload, created_at: Date.now(), status: "pending", attempts: 0 });
   });

@@ -43,20 +43,31 @@ export const products = sqliteTable("products", {
   moneda: text("moneda", { enum: ["CUP", "USD"] }).notNull().default("CUP"),
   costoCents: integer("costo_cents"),
   activo: integer("activo", { mode: "boolean" }).notNull().default(true),
+  trackStock: integer("track_stock", { mode: "boolean" }).notNull().default(false),
+  minStock: integer("min_stock").notNull().default(0),
   stockQty: integer("stock_qty").notNull().default(0),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
 }, (t) => [index("products_tenant_cursor").on(t.tenantId, t.updatedAt, t.id)]);
 
-export const sales = sqliteTable("sales", {
-  id: text("id").primaryKey(),
-  tenantId: text("tenant_id").notNull().references(() => tenants.id),
-  userId: text("user_id").notNull().references(() => users.id),
-  deviceId: text("device_id"),
-  totalCents: integer("total_cents").notNull(),
-  moneda: text("moneda", { enum: ["CUP", "USD"] }).notNull(),
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-});
+export type PaymentMethod = "efectivo" | "transferencia" | "otro";
+
+export const sales = sqliteTable(
+  "sales",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    userId: text("user_id").notNull().references(() => users.id),
+    deviceId: text("device_id"),
+    totalCents: integer("total_cents").notNull(),
+    moneda: text("moneda", { enum: ["CUP", "USD"] }).notNull(),
+    method: text("method", { enum: ["efectivo", "transferencia", "otro"] }).notNull().default("efectivo"),
+    cashSessionId: text("cash_session_id"),
+    // Hora de la venta (reloj del cliente); el reporte del día filtra por aquí.
+    occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("sales_tenant_occurred").on(t.tenantId, t.occurredAt)],
+);
 
 export const saleItems = sqliteTable("sale_items", {
   id: text("id").primaryKey(),
