@@ -13,7 +13,9 @@
   compartido (dinero con `parseMoney`); borrado lógico con confirmación.
 - Inventario: solo productos con control, badge Bajo/Agotado, filtro "Solo bajos" (y badge en la barra);
   Compra/Ajuste(±)/Merma con nota → `stock.adjust`; cajero en solo lectura.
-- Pantallas: Vender ✅ · Productos ✅ · Inventario ✅ · Caja y Reporte (en curso).
+- Caja: apertura por moneda, efectivo esperado en vivo (efectivo de la sesión, `src/shared/cash.ts`),
+  cierre con contado y diferencia (sobra/falta) e historial local de las últimas 10 sesiones.
+- Pantallas: Vender ✅ · Productos ✅ · Inventario ✅ · Caja ✅ · Reporte (en curso).
 
 ## Fase 2 ✅
 `POST/GET /api/sync` (op_log idempotente, batch atómico por op, pull de productos por cursor);
