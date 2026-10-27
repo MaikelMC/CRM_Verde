@@ -7,7 +7,9 @@
 - `sale.create` en servidor y cliente: descuenta stock solo si `track_stock=1`; si no, no toca la fila.
 - Base: router hash con `import()` por pantalla, barra inferior con badge de bajos, CSS móvil único
   y sesión cacheada en Dexie (`/api/me` + login por código; cajero sin Productos).
-- Pantallas: (en curso).
+- Vender: catálogo por moneda con búsqueda (debounce) y categorías; carrito en hoja inferior con ±,
+  cantidad editable y método de pago; confirmar = una transacción Dexie (venta + stock + outbox).
+- Pantallas: Vender ✅ · Productos, Inventario, Caja y Reporte (en curso).
 
 ## Fase 2 ✅
 `POST/GET /api/sync` (op_log idempotente, batch atómico por op, pull de productos por cursor);
