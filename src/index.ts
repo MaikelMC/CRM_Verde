@@ -5,7 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import { getDb } from "./db/client";
 import { memberships, tenants, users, type Role } from "./db/schema";
-import { tenantProducts } from "./db/tenant";
+import { tenantProducts, tenantReports } from "./db/tenant";
 import { accessCode, allowLogin, failLogin, hashCode, resetLogin, signSession, verifySession } from "./lib/auth";
 import { newId } from "./lib/ids";
 import { applyOps, syncBodySchema } from "./sync/apply";
@@ -146,6 +146,27 @@ app.post("/api/sync", async (c) => {
     parsed.data.ops,
   );
   return c.json({ results });
+});
+
+const MAX_RANGO_MS = 36 * 60 * 60 * 1000;
+
+// Reporte del día por rango de occurred_at (zona horaria del dispositivo).
+app.get("/api/reports/day", async (c) => {
+  if (c.get("role") === "cajero") return c.json({ error: "forbidden" }, 403);
+  const from = Number(c.req.query("from"));
+  const to = Number(c.req.query("to"));
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from <= 0 || to <= from) {
+    return c.json({ error: "invalid_range" }, 400);
+  }
+  if (to - from > MAX_RANGO_MS) return c.json({ error: "range_too_large" }, 400);
+
+  const reports = tenantReports(getDb(c.env.DB), c.get("tenantId"));
+  const [totals, top_products, by_user] = await getDb(c.env.DB).batch([
+    reports.porMetodo(from, to),
+    reports.topProductos(from, to),
+    reports.porUsuario(from, to),
+  ]);
+  return c.json({ from, to, totals, top_products, by_user });
 });
 
 app.get("/api/sync", async (c) => {

@@ -1,31 +1,28 @@
 # Progreso
 
-## Fase 3 — Pantallas (en curso)
+## Fase 3 — Pantallas ✅ (2026-10-27)
 - Datos (migración `0002`): `products.track_stock/min_stock`, `sales.occurred_at/method/cash_session_id`
-  + índice `sales_tenant_occurred (tenant_id, occurred_at)`. Dexie v2 (upgrade) con `cash_sessions`.
-- Contratos compartidos en `src/shared/`: `ops.ts` (zod de todas las ops), `money.ts`, `cash.ts`.
-- `sale.create` en servidor y cliente: descuenta stock solo si `track_stock=1`; si no, no toca la fila.
-- Base: router hash con `import()` por pantalla, barra inferior con badge de bajos, CSS móvil único
-  y sesión cacheada en Dexie (`/api/me` + login por código; cajero sin Productos).
-- Vender: catálogo por moneda con búsqueda (debounce) y categorías; carrito en hoja inferior con ±,
-  cantidad editable y método de pago; confirmar = una transacción Dexie (venta + stock + outbox).
-- Productos (owner|gerente): lista con búsqueda/categoría y formulario crear/editar validado con el zod
-  compartido (dinero con `parseMoney`); borrado lógico con confirmación.
-- Inventario: solo productos con control, badge Bajo/Agotado, filtro "Solo bajos" (y badge en la barra);
-  Compra/Ajuste(±)/Merma con nota → `stock.adjust`; cajero en solo lectura.
-- Caja: apertura por moneda, efectivo esperado en vivo (efectivo de la sesión, `src/shared/cash.ts`),
-  cierre con contado y diferencia (sobra/falta) e historial local de las últimas 10 sesiones.
-- Pantallas: Vender ✅ · Productos ✅ · Inventario ✅ · Caja ✅ · Reporte (en curso).
-
-## Fase 2 ✅
-`POST/GET /api/sync` (op_log idempotente, batch atómico por op, pull de productos por cursor);
-outbox Dexie transaccional en el cliente; PWA con manifest y 3 iconos; `dist/` servido por el Worker.
-
-## Fase 1 ✅
-Auth por código (SHA-256+pepper, cookie HMAC), rate limit por isolate, D1 + Drizzle, aislamiento por tenant.
-
-## Verificado
-- `npm run typecheck` exit 0 · `npm test` exit 0: 5 servidor + 3 cliente · migración 0002 aplicada en local.
-
-## Pendiente
-- Deploy remoto: `wrangler login`, `d1 create`, `db:migrate:remote`, secrets y `npm run deploy`.
+  e índice `sales_tenant_occurred`; Dexie v2 (upgrade) con `cash_sessions`; contratos zod en `src/shared/`.
+- `sale.create` (servidor y cliente) descuenta stock solo si `track_stock=1`; los demás productos no se tocan.
+- Base: router hash con `import()` por pantalla, barra inferior con badge de bajos, CSS móvil único y sesión
+  cacheada en Dexie (`/api/me` + login por código); el cajero no ve Productos.
+- Vender, Productos, Inventario, Caja y Reporte ✅ + `GET /api/reports/day` (dueño/gerente, ≤3 consultas SQL
+  en un batch sobre `occurred_at`, rango máximo 36 h, sin agregar en JS).
+- Pruebas: 13 servidor + 5 cliente = 18 (stock condicional, reporte con aislamiento y límites, venta offline).
+### Medido y decidido
+- Venta de 3 ítems (3 productos distintos): 5 filas sin control de stock (1 `sales` + 3 `sale_items` + 1 `op_log`)
+  y 8 con control (+3 UPDATE `products`).
+- JS inicial: 41,9 kB gzip (entry) + 1,7 kB CSS ≈ 43,6 kB; con `workbox-window` ≈ 45,8 kB. Objetivo ≤150 kB.
+- `sales.created_at` → `occurred_at` (hora de la venta); el índice `sales(tenant_id, created_at)` del plan no
+  existía en `0001`, así que se creó el nuevo. `sale.create` ganó `method` y `cash_session_id` (opcionales).
+- Caja: efectivo esperado y diferencia son funciones puras en `src/shared/cash.ts`; una sesión abierta por
+  usuario y moneda y no bloquea vender. El reporte nunca suma monedas distintas (el servidor agrupa por moneda).
+- Dinero: separador de miles desde `Intl.NumberFormat("es")` y agrupado a mano (workerd con ICU recortado no
+  agrupa en "es"); `parseMoney` acepta "12,50" y "12.50" y devuelve centavos enteros.
+### Verificado
+- `npm run typecheck` exit 0 · `npm test` exit 0 (13+5) · `npm run build` exit 0 (SW + manifest + 3 iconos) ·
+  `wrangler deploy --dry-run` exit 0 con bindings DB y ASSETS · migración 0002 aplicada en local.
+### Pendiente
+- Deploy remoto: `npx wrangler login`, `npx wrangler d1 create la-verde-gestion`, `database_id` real en
+  `wrangler.jsonc`, `npm run db:migrate:remote`, secrets `AUTH_SECRET`/`SETUP_TOKEN`, `npm run deploy`.
+- Fuera de alcance: anular ventas, tickets, multi-local, Excel, fotos, turnos, cuentas por cobrar.

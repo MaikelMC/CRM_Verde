@@ -3,12 +3,17 @@ import type { Moneda } from "./ops";
 // Dinero: siempre centavos enteros. Este módulo solo formatea/parsea; nunca hace aritmética con floats.
 
 const SIMBOLO: Record<Moneda, string> = { CUP: "$", USD: "US$" };
+
+// El separador de miles sale de Intl.NumberFormat('es'); algunos motores con ICU recortado no
+// agrupan con "es", así que se agrupa a mano con ese separador.
 const GRUPOS = new Intl.NumberFormat("es", { maximumFractionDigits: 0 });
+const GRUPO = GRUPOS.formatToParts(1000).find((p) => p.type === "group")?.value ?? ".";
+const agrupar = (entero: number): string => String(entero).replace(/\B(?=(\d{3})+(?!\d))/g, GRUPO);
 
 // 1250 -> "12,50" (sin símbolo, para editar en formularios)
 export function formatCents(cents: number): string {
   const abs = Math.abs(Math.trunc(cents));
-  return `${cents < 0 ? "-" : ""}${GRUPOS.format(Math.trunc(abs / 100))},${String(abs % 100).padStart(2, "0")}`;
+  return `${cents < 0 ? "-" : ""}${agrupar(Math.trunc(abs / 100))},${String(abs % 100).padStart(2, "0")}`;
 }
 
 // 1250 -> "$12,50"
