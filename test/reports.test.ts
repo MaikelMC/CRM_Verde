@@ -82,6 +82,21 @@ describe("GET /api/reports/day", () => {
     expect(body.by_user.some((u) => u.user_id === b.userId)).toBe(false);
   });
 
+  it("el límite superior es exclusivo (no cuenta la venta de las 00:00 del día siguiente)", async () => {
+    const a = await seed();
+    const ahora = Date.now();
+    await vender(a.ctx, ahora, { moneda: "CUP", method: "efectivo", items: [{ pid: id(), qty: 1, cents: 100 }] });
+
+    const res = await app.request(
+      `/api/reports/day?from=${ahora - 86_400_000}&to=${ahora}`,
+      { headers: { cookie: a.cookie } },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { totals: unknown[] };
+    expect(body.totals).toHaveLength(0);
+  });
+
   it("rechaza rangos mayores de 36 h y a los cajeros", async () => {
     const { cookie } = await seed();
     const ahora = Date.now();

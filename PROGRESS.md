@@ -20,8 +20,10 @@
 - Dinero: separador de miles desde `Intl.NumberFormat("es")` y agrupado a mano (workerd con ICU recortado no
   agrupa en "es"); `parseMoney` acepta "12,50" y "12.50" y devuelve centavos enteros.
 ### Verificado
-- `npm run typecheck` exit 0 · `npm test` exit 0 (13+5) · `npm run build` exit 0 (SW + manifest + 3 iconos) ·
+- `npm run typecheck` exit 0 · `npm test` exit 0 (15+5 tras correcciones) · `npm run build` exit 0 ·
   `wrangler deploy --dry-run` exit 0 con bindings DB y ASSETS · migración 0002 aplicada en local.
+- Correcciones de la revisión: `cash.close` solo por el dueño de la sesión, gate de rol en Productos,
+  reporte con límite superior exclusivo `[from,to)` y `DevPage.tsx` eliminado.
 ### Pendiente
 - Deploy remoto: `npx wrangler login`, `npx wrangler d1 create la-verde-gestion`, `database_id` real en
   `wrangler.jsonc`, `npm run db:migrate:remote`, secrets `AUTH_SECRET`/`SETUP_TOKEN`, `npm run deploy`.

@@ -145,7 +145,8 @@ function build(db: Db, ctx: SyncCtx, type: OpType, payload: unknown, now: Date):
         db
           .update(cashSessions)
           .set({ closedAt: now, closingCents: p.data.closing_cents })
-          .where(and(eq(cashSessions.id, p.data.id), eq(cashSessions.tenantId, ctx.tenantId))),
+          // Solo el dueño de la sesión puede cerrarla (nadie cierra la caja de otro).
+          .where(and(eq(cashSessions.id, p.data.id), eq(cashSessions.tenantId, ctx.tenantId), eq(cashSessions.userId, ctx.userId))),
       ];
     }
   }

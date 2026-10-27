@@ -6,6 +6,7 @@ import { errorMessage, productPayloadSchema, type Moneda } from "../../shared/op
 import { db, type ProductRow } from "../db";
 import { isActivo } from "../lowstock";
 import type { ScreenProps } from "../router";
+import { puedeEditar } from "../session";
 import { enqueue } from "../sync";
 
 type Form = {
@@ -44,7 +45,7 @@ const deProducto = (p: ProductRow): Form => ({
   activo: p.activo,
 });
 
-export default function Products(_: ScreenProps) {
+export default function Products({ session }: ScreenProps) {
   const [productos, setProductos] = useState<ProductRow[] | null>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -113,6 +114,8 @@ export default function Products(_: ScreenProps) {
   }
 
   if (error) return <main><p class="error">{error}</p></main>;
+  // La barra ya lo oculta al cajero; esto cubre entrar por la URL a mano.
+  if (!puedeEditar(session.role)) return <main><p class="estado">Solo el dueño o un gerente puede editar productos.</p></main>;
 
   return (
     <main>

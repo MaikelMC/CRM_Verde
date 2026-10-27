@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, lt, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { products, saleItems, sales, users } from "./schema";
 
@@ -15,7 +15,8 @@ export function tenantProducts(db: Db, tenantId: string) {
 // Reporte del día: agregaciones en SQL (3 consultas), el JS solo da forma al JSON.
 export function tenantReports(db: Db, tenantId: string) {
   const rango = (from: number, to: number) =>
-    and(eq(sales.tenantId, tenantId), gte(sales.occurredAt, new Date(from)), lte(sales.occurredAt, new Date(to)));
+    // [from, to): el cliente manda el inicio del día siguiente como "to", así que es exclusivo.
+    and(eq(sales.tenantId, tenantId), gte(sales.occurredAt, new Date(from)), lt(sales.occurredAt, new Date(to)));
 
   return {
     porMetodo: (from: number, to: number) =>

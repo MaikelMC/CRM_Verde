@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { getDb } from "../src/db/client";
-import { memberships, products, sales, tenants, users, type Role } from "../src/db/schema";
+import { cashSessions, memberships, products, sales, tenants, users, type Role } from "../src/db/schema";
 import { applyOps, type SyncCtx } from "../src/sync/apply";
 import { parseCursor, pullProducts } from "../src/sync/pull";
 
@@ -64,6 +64,23 @@ describe("POST /api/sync (applyOps)", () => {
     const [product] = await db.select().from(products).where(eq(products.id, pid));
     expect(product?.nombre).toBe("Té");
     expect(product?.stockQty).toBe(5);
+  });
+
+  it("nadie puede cerrar la caja de otro usuario", async () => {
+    const { db, ctx } = await seed("cajero");
+    const otroId = id();
+    await db.insert(users).values({ id: otroId, name: "Otro", codeHash: id(), createdAt: new Date() });
+    await db.insert(memberships).values({ id: id(), userId: otroId, tenantId: ctx.tenantId, role: "cajero" });
+
+    const caja = id();
+    const [open] = await applyOps(db, { ...ctx, userId: otroId }, [
+      { op_id: id(), type: "cash.open", payload: { id: caja, opening_cents: 1_000, moneda: "CUP" } },
+    ]);
+    expect(open?.status).toBe("applied");
+
+    await applyOps(db, ctx, [{ op_id: id(), type: "cash.close", payload: { id: caja, closing_cents: 1_000 } }]);
+    const [row] = await db.select().from(cashSessions).where(eq(cashSessions.id, caja));
+    expect(row?.closedAt).toBeNull();
   });
 
   it("un cajero no puede hacer product.upsert", async () => {

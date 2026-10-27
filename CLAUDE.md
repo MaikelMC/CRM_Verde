@@ -8,7 +8,7 @@ TypeScript estricto · Hono · Drizzle + D1 · zod · Vite + Preact · Dexie · 
 
 ## Comandos
 - `npm run dev` — Worker local (D1 local + `.dev.vars`)
-- `npm test` — vitest-pool-workers (D1 con migraciones aplicadas)
+- `npm test` — Vitest: Worker+D1 con migraciones (`@cloudflare/vitest-plugin`) y cliente con `fake-indexeddb`
 - `npm run typecheck`
 - `npm run db:generate` — migración Drizzle desde el schema
 - `npm run db:migrate:local` / `db:migrate:remote`
