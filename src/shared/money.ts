@@ -5,12 +5,15 @@ import type { Moneda } from "./ops";
 const SIMBOLO: Record<Moneda, string> = { CUP: "$", USD: "US$" };
 const GRUPOS = new Intl.NumberFormat("es", { maximumFractionDigits: 0 });
 
+// 1250 -> "12,50" (sin símbolo, para editar en formularios)
+export function formatCents(cents: number): string {
+  const abs = Math.abs(Math.trunc(cents));
+  return `${cents < 0 ? "-" : ""}${GRUPOS.format(Math.trunc(abs / 100))},${String(abs % 100).padStart(2, "0")}`;
+}
+
 // 1250 -> "$12,50"
 export function formatMoney(cents: number, moneda: Moneda = "CUP"): string {
-  const abs = Math.abs(Math.trunc(cents));
-  const entero = Math.trunc(abs / 100);
-  const frac = abs % 100;
-  return `${cents < 0 ? "-" : ""}${SIMBOLO[moneda]}${GRUPOS.format(entero)},${String(frac).padStart(2, "0")}`;
+  return `${cents < 0 ? "-" : ""}${SIMBOLO[moneda]}${formatCents(Math.abs(cents))}`;
 }
 
 // Separa "1.250" (miles) de "12.50" (decimales) según los dígitos tras el último separador.

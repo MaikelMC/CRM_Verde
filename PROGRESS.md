@@ -9,7 +9,9 @@
   y sesión cacheada en Dexie (`/api/me` + login por código; cajero sin Productos).
 - Vender: catálogo por moneda con búsqueda (debounce) y categorías; carrito en hoja inferior con ±,
   cantidad editable y método de pago; confirmar = una transacción Dexie (venta + stock + outbox).
-- Pantallas: Vender ✅ · Productos, Inventario, Caja y Reporte (en curso).
+- Productos (owner|gerente): lista con búsqueda/categoría y formulario crear/editar validado con el zod
+  compartido (dinero con `parseMoney`); borrado lógico con confirmación.
+- Pantallas: Vender ✅ · Productos ✅ · Inventario, Caja y Reporte (en curso).
 
 ## Fase 2 ✅
 `POST/GET /api/sync` (op_log idempotente, batch atómico por op, pull de productos por cursor);
