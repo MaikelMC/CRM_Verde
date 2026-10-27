@@ -10,6 +10,7 @@ export default defineConfig({
       manifest: {
         name: "La Verde Gestión",
         short_name: "Gestión",
+        lang: "es",
         start_url: "/",
         display: "standalone",
         background_color: "#0b3d2e",
