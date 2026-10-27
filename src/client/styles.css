@@ -1,0 +1,14 @@
+:root { --verde: #0b3d2e; --crema: #f4efe3; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; background: #f7f5ef; color: #1c1c1c; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px; background: var(--verde); color: var(--crema); }
+main { padding: 16px; max-width: 720px; margin: 0 auto; }
+.sync { position: relative; }
+.sync-badge { border: 1px solid var(--crema); background: transparent; color: inherit; border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+.sync-badge.bad { background: #8a2b1d; border-color: #8a2b1d; }
+.sync-failed { position: absolute; right: 0; top: 30px; z-index: 10; background: #fff; color: #1c1c1c; border: 1px solid #ccc; border-radius: 8px; padding: 8px 16px; min-width: 240px; }
+form { display: flex; gap: 8px; margin: 12px 0; }
+input { flex: 1; padding: 8px; }
+button { padding: 8px 12px; cursor: pointer; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.banner { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 12px; padding: 10px; background: var(--verde); color: var(--crema); }

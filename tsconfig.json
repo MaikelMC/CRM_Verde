@@ -10,5 +10,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "test", "vitest.config.ts", "drizzle.config.ts"]
+  "include": ["src", "test", "vitest.config.ts", "drizzle.config.ts"],
+  "exclude": ["src/client", "test/client"]
 }

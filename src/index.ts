@@ -8,6 +8,8 @@ import { memberships, tenants, users, type Role } from "./db/schema";
 import { tenantProducts } from "./db/tenant";
 import { accessCode, allowLogin, failLogin, hashCode, resetLogin, signSession, verifySession } from "./lib/auth";
 import { newId } from "./lib/ids";
+import { applyOps, syncBodySchema } from "./sync/apply";
+import { parseCursor, pullProducts } from "./sync/pull";
 
 export type Env = {
   DB: D1Database;
@@ -128,6 +130,29 @@ app.get("/api/me", async (c) => {
 app.get("/api/products", async (c) => {
   const products = await tenantProducts(getDb(c.env.DB), c.get("tenantId")).list();
   return c.json({ products });
+});
+
+app.post("/api/sync", async (c) => {
+  const parsed = syncBodySchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_body" }, 400);
+  const results = await applyOps(
+    getDb(c.env.DB),
+    {
+      tenantId: c.get("tenantId"),
+      userId: c.get("userId"),
+      deviceId: parsed.data.device_id,
+      role: c.get("role"),
+    },
+    parsed.data.ops,
+  );
+  return c.json({ results });
+});
+
+app.get("/api/sync", async (c) => {
+  const since = parseCursor(c.req.query("since"));
+  if (since === undefined) return c.json({ error: "invalid_cursor" }, 400);
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 200) || 200, 1), 500);
+  return c.json(await pullProducts(getDb(c.env.DB), c.get("tenantId"), since, limit));
 });
 
 app.notFound((c) => c.json({ error: "not_found" }, 404));

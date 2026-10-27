@@ -18,6 +18,8 @@ export default defineConfig({
     })),
   ],
   test: {
+    include: ["test/**/*.test.ts"],
+    exclude: ["test/client/**"],
     setupFiles: ["./test/apply-migrations.ts"],
   },
 });
